@@ -151,7 +151,7 @@ public:
 
 input int InpEma1Period=3;  //Fast EMA Period
 input int InpEma2Period=20;  //Secound EMA Period
-
+input double InpThreshold=0.8;   //Threshold
 int AtrPeriod=100;      // ATR Period
 double AtrAlpha=2.0/(AtrPeriod+1.0);
 
@@ -161,6 +161,8 @@ double Ema2Alpha=2.0/(InpEma2Period+1.0);
 //---- will be used as indicator buffers
 double EMA1[];
 double EMA2[];
+double PRICE[];
+double STEP[];
 
 double ZZ[];
 double ATR[];
@@ -177,6 +179,7 @@ double CNT[];
 
 CStatus Stat;
 CBuffer TurnBuffer;
+CBuffer ZZBuffer;
 
 //---- declaration of global variables
 
@@ -196,6 +199,7 @@ int OnInit()
    SetIndexBuffer(i++,EMA1,INDICATOR_DATA);
    SetIndexBuffer(i++,EMA2,INDICATOR_DATA);
    SetIndexBuffer(i++,ZZ,INDICATOR_DATA);
+   SetIndexBuffer(i++,PRICE,INDICATOR_DATA);
    SetIndexBuffer(i++,SIG1T,INDICATOR_DATA);
    SetIndexBuffer(i++,SIG1B,INDICATOR_DATA);
    SetIndexBuffer(i++,SIG2T,INDICATOR_DATA);
@@ -223,6 +227,7 @@ int OnInit()
 //---
    Stat.Init();
    TurnBuffer.Init(100);
+   ZZBuffer.Init(100);
 //---
    return(INIT_SUCCEEDED);
   }
@@ -273,13 +278,13 @@ int OnCalculate(const int rates_total,
       SIG1B[bar]=EMPTY_VALUE;
       SIG2B[bar]=EMPTY_VALUE;
       SIG3B[bar]=EMPTY_VALUE;
+      PRICE[bar]=EMPTY_VALUE;
       if(i==begin_pos)
         {
          // only first time
          ATR[i]=MathMax(high[i],close[i-1])-MathMin(low[i],close[i-1]);
          EMA1[i]=close[i];
          EMA2[i]=close[i];
-
         }
       else
       {
@@ -289,20 +294,68 @@ int OnCalculate(const int rates_total,
          EMA1[i]=Ema1Alpha*EMA1[i]+(1-Ema1Alpha)*EMA1[i-1];
          EMA2[i]=Ema2Alpha*EMA2[i]+(1-Ema2Alpha)*EMA2[i-1];
       }
+      PRICE[i]=(high[i]+low[i])/2;
       
       //---
 
       int i1st=begin_pos+2;
       if(i<=i1st)continue;
 
-      if(EMA1[i]>EMA2[i]+ATR[i] && EMA1[i-1]<EMA2[i-1]+ATR[i])
+      double base=ATR[i]*InpThreshold;
+
+      //--- 
+      if((PRICE[i]-base)>STEP[i-1]) STEP[i]=PRICE[i];
+      else if(PRICE[i]+base<STEP[i-1]) STEP[i]=PRICE[i]+base;
+      else STEP[i]=STEP[i-1];
+
+
+
+      int x1 = TurnBuffer.GetIndex(0);
+      int v1 = TurnBuffer.GetValue(0);
+      if(STEP[i]>STEP[i-1])
+        {
+         if(x1!=NULL && v1 == -1)
+           {
+            int imin=ArrayMinimum(low, x1 , i-(x1-1));
+            ZZ[imin]=low[imin];
+            ZZBuffer.Add(imin,-1);
+           }
+         if(x1 == NULL || (x1!=NULL && v1== -1) TurnBuffer.Add(i,1);
+         
+        }
+      else if(STEP[i]<STEP[i])
+        {
+         if(x1!=NULL && v1 == 1)
+           {
+            int imax=ArrayMaximum(high, x1 , i-(x1-1));
+            ZZ[imax]=high[imax];
+            ZZBuffer.Add(imax,1);
+           }
+         if(x1 == NULL || (x1!=NULL && v1== -1) TurnBuffer.Add(i,-1);
+        }
+      
+      
+      
+
+
+
+
+
+
+
+
+
+
+
+
+      if(EMA1[i]>EMA2[i] && EMA1[i-1]<EMA2[i-1])
       {
          int x1=TurnBuffer.GetIndex(1);
          int imin=ArrayMinimum(low,x1,i-x1);
          ZZ[imin]=low[imin];
          TurnBuffer.Add(i,1);
       }
-      else if(EMA1[i]<EMA2[i]-ATR[i] && EMA1[i-1]>EMA2[i-1]-ATR[i])
+      else if(EMA1[i]<EMA2[i] && EMA1[i-1]>EMA2[i-1])
       {
          int x1=TurnBuffer.GetIndex(1);
          int imax=ArrayMaximum(high,x1,i-x1);
